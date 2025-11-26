@@ -181,4 +181,5 @@ cython_debug/
 .cursorindexingignore
 
 *data/
+*walk_segmented_csvs/
 .DS_Store
