@@ -184,3 +184,4 @@ cython_debug/
 *walk_segmented_csvs/
 .DS_Store
 *.zip
+walk_segment_summary.csv
