@@ -1,6 +1,6 @@
 # neon-gaze-angle
 
-A reproducible pipeline for processing and analyzing **gaze angle** from a [Pupil Neon](https://pupil-labs.com/products/neon) eye tracker. Designed for open-science workflows: every processing step runs in a Jupyter notebook so you can inspect intermediate results in real time.
+A reproducible pipeline for processing and analyzing **gaze angle** from a [Pupil Neon](https://pupil-labs.com/products/neon) eye tracker, primarily focused on setting up the data for Recurrence Quantification Analysis (RQA). Designed for open-science workflows: every processing step runs in a Jupyter notebook so you can inspect intermediate results in real time.
 
 ## What it does
 
