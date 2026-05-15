@@ -5,8 +5,6 @@ Provides Plotly-based and Matplotlib-based plotting functions used
 across the analysis notebooks.
 """
 
-import os
-
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -14,7 +12,7 @@ import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 
 
-# ── Plotly-based helpers ─────────────────────────────────────────────
+# ── Gaze time-series plots (Plotly) ──────────────────────────────────
 
 def plot_gaze_angle(
     gaze_angle_df: pd.DataFrame,
@@ -49,57 +47,6 @@ def plot_gaze_angle(
     )
     fig.update_traces(mode="lines+markers")
     fig.update_yaxes(range=list(y_range))
-    return fig
-
-
-def plot_gaze_angle_with_gait(
-    gaze_angle_df: pd.DataFrame,
-    hs_times: np.ndarray,
-    to_times: np.ndarray,
-    title: str = "Gaze Angle with Gait Events",
-    y_range: tuple[float, float] = (-90, 45),
-) -> go.Figure:
-    """Gaze-angle plot overlaid with heel-strike (red) and toe-off (blue) lines.
-
-    Parameters
-    ----------
-    gaze_angle_df : pd.DataFrame
-        Must contain ``time_sec`` and ``gaze angle [deg]``.
-    hs_times, to_times : array-like
-        Event times in seconds.
-    title : str
-        Plot title.
-    y_range : tuple
-        (min, max) for the y-axis.
-
-    Returns
-    -------
-    plotly.graph_objects.Figure
-    """
-    fig = plot_gaze_angle(gaze_angle_df, title=title, y_range=y_range)
-
-    y_min = gaze_angle_df["gaze angle [deg]"].min()
-    y_max = gaze_angle_df["gaze angle [deg]"].max()
-
-    shapes = []
-    for t in hs_times:
-        shapes.append(
-            dict(
-                type="line", xref="x", yref="y",
-                x0=t, x1=t, y0=y_min, y1=y_max,
-                line=dict(width=2, color="red"), opacity=0.7,
-            )
-        )
-    for t in to_times:
-        shapes.append(
-            dict(
-                type="line", xref="x", yref="y",
-                x0=t, x1=t, y0=y_min, y1=y_max,
-                line=dict(width=2, color="blue"), opacity=0.7,
-            )
-        )
-
-    fig.update_layout(shapes=shapes)
     return fig
 
 
@@ -191,67 +138,67 @@ def plot_imu_yaw(
     return fig
 
 
-def plot_filtered_acceleration(
-    imu_df: pd.DataFrame,
-    hs_times: np.ndarray,
-    to_times: np.ndarray,
-    title: str = "Filtered IMU Vertical Acceleration",
-) -> go.Figure:
-    """Plot filtered acceleration with gait-event lines.
+# ── Recurrence plots (Matplotlib) ────────────────────────────────────
+
+def plot_recurrence_matrix(
+    gaze_series: np.ndarray,
+    epsilon: float,
+    title: str = "Recurrence Plot",
+    figsize: tuple[int, int] = (6, 6),
+) -> None:
+    """Plot a square recurrence matrix for a z-scored gaze series.
 
     Parameters
     ----------
-    imu_df : pd.DataFrame
-        Must contain ``time_sec`` and ``acc_filt`` (from
-        :func:`neon_gaze.gait.detect_gait_events`).
-    hs_times, to_times : array-like
-        Event times in seconds.
+    gaze_series : array-like
+        1-D time series (NaNs are dropped; then z-scored internally).
+    epsilon : float
+        Recurrence radius in z-score units.
     title : str
         Plot title.
-
-    Returns
-    -------
-    plotly.graph_objects.Figure
+    figsize : tuple
+        Matplotlib figure size.
     """
-    fig = px.scatter(
-        imu_df,
-        x="time_sec",
-        y="acc_filt",
-        title=title,
-        labels={
-            "acc_filt": "Vertical Acceleration (G, filtered)",
-            "time_sec": "Time (sec)",
-        },
-        render_mode="webgl",
+    gaze = np.asarray(gaze_series, dtype=float)
+    x = gaze[~np.isnan(gaze)]
+
+    if x.size < 2:
+        print("Not enough valid samples for a recurrence plot.")
+        return
+
+    mean_x = x.mean()
+    std_x = x.std(ddof=1)
+    if std_x == 0 or np.isnan(std_x):
+        print("Zero or NaN std; cannot z-score.")
+        return
+
+    x_z = (x - mean_x) / std_x
+
+    dist = np.abs(x_z[:, None] - x_z[None, :])
+    R = dist <= epsilon
+    N = x_z.size
+    RR = R.mean()
+
+    plt.figure(figsize=figsize)
+    ax = plt.gca()
+    ax.imshow(
+        R,
+        origin="lower",
+        cmap="gray_r",
+        interpolation="nearest",
+        extent=[0, N - 1, 0, N - 1],
     )
-    fig.update_traces(mode="lines+markers")
-
-    y_min = imu_df["acc_filt"].min()
-    y_max = imu_df["acc_filt"].max()
-
-    shapes = []
-    for t in hs_times:
-        shapes.append(
-            dict(
-                type="line", xref="x", yref="y",
-                x0=t, x1=t, y0=y_min, y1=y_max,
-                line=dict(width=2, color="red"), opacity=0.7,
-            )
-        )
-    for t in to_times:
-        shapes.append(
-            dict(
-                type="line", xref="x", yref="y",
-                x0=t, x1=t, y0=y_min, y1=y_max,
-                line=dict(width=2, color="blue"), opacity=0.7,
-            )
-        )
-
-    fig.update_layout(shapes=shapes)
-    return fig
+    ax.set_xlabel("Time index")
+    ax.set_ylabel("Time index")
+    ax.set_title(f"{title}\nε = {epsilon:.2f} (z), RR = {RR:.3f}")
+    ax.set_aspect("equal", "box")
+    ax.set_xlim(0, N - 1)
+    ax.set_ylim(0, N - 1)
+    plt.tight_layout()
+    plt.show()
 
 
-# ── Matplotlib-based helpers ─────────────────────────────────────────
+# ── Fixation helpers (used by explore_fixations notebook) ────────────
 
 def plot_fixation_histograms(
     df_left: pd.DataFrame,
@@ -327,61 +274,3 @@ def plot_fixation_histograms(
     )
 
     return (hist_left, hist_right), (stats_left, stats_right)
-
-
-def plot_recurrence_matrix(
-    gaze_series: np.ndarray,
-    epsilon: float,
-    title: str = "Recurrence Plot",
-    figsize: tuple[int, int] = (6, 6),
-) -> None:
-    """Plot a square recurrence matrix for a z-scored gaze series.
-
-    Parameters
-    ----------
-    gaze_series : array-like
-        1-D time series (NaNs are dropped; then z-scored internally).
-    epsilon : float
-        Recurrence radius in z-score units.
-    title : str
-        Plot title.
-    figsize : tuple
-        Matplotlib figure size.
-    """
-    gaze = np.asarray(gaze_series, dtype=float)
-    x = gaze[~np.isnan(gaze)]
-
-    if x.size < 2:
-        print("Not enough valid samples for a recurrence plot.")
-        return
-
-    mean_x = x.mean()
-    std_x = x.std(ddof=1)
-    if std_x == 0 or np.isnan(std_x):
-        print("Zero or NaN std; cannot z-score.")
-        return
-
-    x_z = (x - mean_x) / std_x
-
-    dist = np.abs(x_z[:, None] - x_z[None, :])
-    R = dist <= epsilon
-    N = x_z.size
-    RR = R.mean()
-
-    plt.figure(figsize=figsize)
-    ax = plt.gca()
-    ax.imshow(
-        R,
-        origin="lower",
-        cmap="gray_r",
-        interpolation="nearest",
-        extent=[0, N - 1, 0, N - 1],
-    )
-    ax.set_xlabel("Time index")
-    ax.set_ylabel("Time index")
-    ax.set_title(f"{title}\nε = {epsilon:.2f} (z), RR = {RR:.3f}")
-    ax.set_aspect("equal", "box")
-    ax.set_xlim(0, N - 1)
-    ax.set_ylim(0, N - 1)
-    plt.tight_layout()
-    plt.show()

@@ -6,6 +6,8 @@ A reproducible pipeline for processing and analyzing **gaze angle** from a [Pupi
 
 The pipeline combines IMU head-pitch data with gaze-elevation data to compute a **gaze angle** (where a person is looking relative to the ground plane). It then segments continuous recordings into individual walking trials using Pupil Neon annotations, and runs **Recurrence Quantification Analysis (RQA)** on each trial to characterize gaze dynamics.
 
+**Core outputs:** recurrence plots and a summary DataFrame of RQA measures (RR, DET, MaxL, ENT, L, LAM, TT) plus descriptive statistics for every trial.
+
 ## Repository structure
 
 ```
@@ -13,7 +15,6 @@ neon-gaze-angle/
 ├── neon_gaze/              # Shared Python package (importable utilities)
 │   ├── io.py               # Load/save Pupil Neon CSV exports
 │   ├── processing.py       # Synchronize IMU + gaze, compute gaze angle, mask blinks
-│   ├── gait.py             # Detect heel-strike / toe-off from IMU accelerometry
 │   ├── segmentation.py     # Parse trial annotations, segment into per-trial CSVs
 │   ├── rqa.py              # Recurrence quantification analysis
 │   ├── plotting.py         # Plotly and Matplotlib visualization helpers
@@ -52,11 +53,11 @@ The pipeline requires Python 3.10+ and the following packages: `numpy`, `pandas`
 
 ### 2. Run the demo
 
-Open **`notebooks/01_compute_gaze_angle.ipynb`** in Jupyter. The default configuration points at the included demo data (`demo/input/`), so you can **Run All** immediately to see the pipeline produce a gaze-angle time series, a histogram, and gait-event overlays.
+Every notebook has a `DEMO` toggle near the top of its Configuration cell. Set `DEMO = True` and **Run All** to process the included sample data (`demo/input/`). This is the fastest way to see the pipeline in action.
 
 ### 3. Use your own data
 
-Each notebook has a **Configuration** cell at the top. Change `DATA_DIR` to point at your own Pupil Neon export folder, set `SAVE_OUTPUT = True`, and run the notebook.
+Set `DEMO = False` (the default). The paths will point at `data/` and `walk_segmented_csvs/`, which is where your own Pupil Neon exports and segmented trials should live. Set `SAVE_OUTPUT = True` when you are ready to write results to disk.
 
 ## Pipeline walkthrough
 
@@ -80,9 +81,9 @@ Computes gaze angle, masks blink intervals with NaN, parses trial annotations, a
 
 **Input:** Folder of segmented trial CSVs.
 
-For each trial, the gaze-angle series is z-scored, then analyzed with Recurrence Quantification Analysis. Two modes are available: fixed-epsilon (same radius for all trials) or RR-locked (radius chosen per trial to match a target recurrence rate). Also computes autocorrelation statistics (mean ACF, AUC).
+For each trial, the gaze-angle series is z-scored, then analyzed with Recurrence Quantification Analysis. Two modes are available: **fixed-epsilon** (same radius for all trials) or **RR-locked** (radius chosen per trial to match a target recurrence rate). Also computes autocorrelation statistics (mean ACF, AUC).
 
-**Output:** A summary CSV with one row per trial, containing descriptive stats and all RQA measures (RR, DET, MaxL, ENT, L, LAM, TT).
+**Output:** A summary CSV with one row per trial, containing descriptive stats and all RQA measures (RR, DET, MaxL, ENT, L, LAM, TT). The notebook also provides an interactive recurrence-plot viewer for visual inspection of individual trials.
 
 ### Notebook 04 — Recurrence Visualization
 
@@ -102,7 +103,7 @@ Loads two `fixations.csv` files and compares fixation-duration distributions bet
 
 | File | Key columns |
 |------|-------------|
-| `imu.csv` | `timestamp [ns]`, `pitch [deg]`, `yaw [deg]`, `acceleration z [G]` |
+| `imu.csv` | `timestamp [ns]`, `pitch [deg]`, `yaw [deg]` |
 | `gaze_positions.csv` | `timestamp [ns]`, `elevation [deg]`, `azimuth [deg]` |
 | `blinks.csv` | `start timestamp [ns]`, `end timestamp [ns]` |
 | `annotations.csv` | `timestamp [ns]`, `label` (values: `"Trial Begin"`, `"Trial End"`) |
@@ -124,7 +125,7 @@ Loads two `fixations.csv` files and compares fixation-duration distributions bet
 
 The codebase follows SOLID programming principles adapted for a research context:
 
-- **Single Responsibility:** Each module in `neon_gaze/` handles one concern (I/O, processing, gait detection, segmentation, RQA, plotting). Notebooks orchestrate these modules without reimplementing logic.
+- **Single Responsibility:** Each module in `neon_gaze/` handles one concern (I/O, processing, segmentation, RQA, plotting). Notebooks orchestrate these modules without reimplementing logic.
 - **Open/Closed:** Processing functions accept parameters (epsilon, target RR, filter cutoffs) without requiring internal changes. New analysis modes can be added by writing new notebooks that import the same modules.
 - **Dependency Inversion:** Notebooks depend on the `neon_gaze` package interface, not on implementation details. You can swap out the RQA engine or plotting library without rewriting notebooks.
 - **DRY:** Functions that were previously copy-pasted across multiple notebooks (e.g. `compute_rqa`, `parse_filename`, `build_recurrence_plot_widget`) now live in one place.
